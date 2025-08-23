@@ -9,12 +9,15 @@ app = Flask(__name__)
 
 try:
     client = MongoClient(os.getenv("MONGODB_URI", "mongodb://localhost:27017/"))
+    # Test the connection
+    client.admin.command('ping')
     db = client.portfolio
     projects_collection = db.projects
     portfolio_collection = db.portfolio
     print("✅ MongoDB connected successfully!")
 except Exception as e:
     print(f"❌ MongoDB connection failed: {e}")
+    print("⚠️  App will run without database functionality")
     projects_collection = None
     portfolio_collection = None
 
@@ -93,6 +96,29 @@ def get_portfolio_from_db():
             print(f"Error fetching portfolio: {e}")
             return None
     return None
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for deployment monitoring"""
+    try:
+        # Test MongoDB connection
+        if portfolio_collection is not None:
+            portfolio_collection.find_one()
+            db_status = "connected"
+        else:
+            db_status = "disconnected"
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': db_status,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 @app.route('/')
 def index():
@@ -233,4 +259,7 @@ def get_portfolio_data():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000) 
+    # Production-ready configuration
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') == 'development'
+    app.run(debug=debug, host='0.0.0.0', port=port) 
